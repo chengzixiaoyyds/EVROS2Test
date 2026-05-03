@@ -10,6 +10,7 @@ import Command
 SERIAL_PORT = 'COM11'
 BAUDRATE = 115200
 SEND_INTERVAL = 0.2  # 5 Hz
+RECV_POLL_INTERVAL = 0.01    # 接收轮询间隔（10ms，避免 CPU 空转）
 
 # 全局共享变量（线程安全）
 latest_command = 0
@@ -60,7 +61,6 @@ def sender(ser: serial.Serial):
         ser.write(packet)
         # 打印十六进制方便调试
         hex_str = ' '.join(f'{b:02X}' for b in packet)
-        print(f"\r[发送] {hex_str}", end="")
         
         # 精准 5Hz 延时（避免累积误差）
         elapsed = time.time() - last_time
@@ -68,6 +68,26 @@ def sender(ser: serial.Serial):
         if sleep_time > 0:
             time.sleep(sleep_time)
         last_time += SEND_INTERVAL
+    
+# ---------- 接收线程 ----------
+def receiver(ser: serial.Serial, buf: Command.CommandBuffer):
+    """持续读取串口数据并写入循环缓冲区"""
+    while not stop_event.is_set():
+        try:
+            if ser.in_waiting:
+                data = ser.read(ser.in_waiting)
+                buf.write(data)
+                pkt = cmd_buf.get_command()
+                if pkt:
+                    decode_and_show(pkt)
+        except serial.SerialException:
+            break
+        time.sleep(RECV_POLL_INTERVAL)
+
+# ---------- 解码并显示数据包 ----------
+def decode_and_show(packet: bytes):
+    cmd = packet[2]
+    print(f"\r[接收] 电平值 = {cmd}", end="")
 
 # ---------- 用户输入处理 ----------
 def get_user_input(prompt: str) -> int:
@@ -92,12 +112,19 @@ if __name__ == "__main__":
     print("输入 'q' 退出\n")
 
     # 启动发送线程
-    t = threading.Thread(target=sender, args=(ser,), daemon=True)
-    t.start()
+    cmd_buf = Command.CommandBuffer()
+    t_send = threading.Thread(target=sender, args=(ser,), daemon=True)
+    t_send.start()
+
+     # 启动接收线程
+    t_recv = threading.Thread(target=receiver, args=(ser, cmd_buf), daemon=True)
+    t_recv.start()
 
     try:
         while True:
-            cmd_input = input("命令字 (0~255，q 退出): ").strip()
+             # 处理接收到的数据包（非阻塞）
+            
+            cmd_input = input("").strip()
             if cmd_input.lower() == 'q':
                 break
             if not cmd_input.isdigit():
@@ -109,7 +136,7 @@ if __name__ == "__main__":
                 continue
 
             # 输入数据值
-            val = get_user_input("数据值 (0~255): ")
+            val = get_user_input("")
 
             # 更新共享变量（线程安全）
             with data_lock:
@@ -119,7 +146,8 @@ if __name__ == "__main__":
 
     finally:
         stop_event.set()        # 通知线程退出
-        t.join(timeout=1)       # 等待线程结束
+        t_send.join(timeout=1)
+        t_recv.join(timeout=1)
         ser.close()
         print("串口已关闭，程序结束。")
         sys.exit(0)
