@@ -3,57 +3,123 @@ import logging
 import sys
 import threading
 import time
+import struct
+import Command
 
+# ---------- 配置 ----------
 SERIAL_PORT = 'COM11'
 BAUDRATE = 115200
-send_interval = 0.2  # 5 Hz
+SEND_INTERVAL = 0.2  # 5 Hz
+
+# 全局共享变量（线程安全）
+latest_command = 0
+latest_value = 0
+data_lock = threading.Lock()
 stop_event = threading.Event()
+command_buffer = Command.CommandBuffer()
 
-command = 0
-value = 0
-
+# ---------- 串口 ----------
 def connect_com():
-    """初始化并连接串口"""
     try:
-        com_serial = serial.Serial(SERIAL_PORT, BAUDRATE, timeout=1)
-        print(f"✅ 成功连接到串口 {SERIAL_PORT}, 波特率 {BAUDRATE}")
+        ser = serial.Serial(SERIAL_PORT, BAUDRATE, timeout=1)
+        print(f"✅ 成功连接到串口 {SERIAL_PORT}，波特率 {BAUDRATE}")
         logging.info(f"成功连接到串口 {SERIAL_PORT}")
-        return com_serial
+        return ser
     except serial.SerialException as e:
-        print(f"❌ 错误: 无法打开串口 {SERIAL_PORT}。")
-        logging.error(f"无法打开串口 {e}")
+        print(f"❌ 无法打开串口 {SERIAL_PORT}: {e}")
+        logging.error(f"无法打开串口: {e}")
         return None
+
+# ---------- 数据包构建 ----------
+def build_packet(command: int, value: int) -> bytes:
+    HEADER = bytes([0x5A, 0xA5])
+    # 构建数据部分：包头 + 命令 + 值
+    if command == 2:
+        brightness = value / 100.0
+        # 亮度值转为 4 字节 float（小端序，可改为 '>f' 大端）
+        payload = HEADER + bytes([command]) + struct.pack('<f', brightness)
+    else:
+        # 普通命令，value 占 1 字节
+        payload = HEADER + bytes([command, value])
+    checksum = sum(payload) & 0xFF
+    return payload + bytes([checksum])
+
+#def break_packet(packet: bytes):
     
-def build_packet(command, value):
-    """构建数据包"""
-    HEADER = [0x5A, 0xA5]  # 包头
-    Command = command  # 命令字
-    Value = value  # 数据值
-    packet = bytes([*HEADER, Command, Value])
-    checksum = sum(packet) & 0xFF
-    return packet + bytes([checksum])
 
-def sender():
-    """定时发送线程"""
+# ---------- 发送线程 ----------
+def sender(ser: serial.Serial):
+    last_time = time.time()
     while not stop_event.is_set():
-        # ----- 可自定义要发送的数据 -----
-        com.write(build_packet(command, value))
-        print("发送数据包: ", build_packet(command, value))
-        time.sleep(send_interval)
+        # 获取最新的命令和值（线程安全）
+        with data_lock:
+            cmd = latest_command
+            val = latest_value
+        
+        packet = build_packet(cmd, val)
+        ser.write(packet)
+        # 打印十六进制方便调试
+        hex_str = ' '.join(f'{b:02X}' for b in packet)
+        print(f"\r[发送] {hex_str}", end="")
+        
+        # 精准 5Hz 延时（避免累积误差）
+        elapsed = time.time() - last_time
+        sleep_time = SEND_INTERVAL - elapsed
+        if sleep_time > 0:
+            time.sleep(sleep_time)
+        last_time += SEND_INTERVAL
 
-if __name__ == "__main__":
-    com = connect_com()
-    if com is None:
-        sys.exit(1)
-    t = threading.Thread(target=sender, daemon=True)
-    t.start()
-    running = True
-    while running:
-        command = input("输入命令字 (0-255, q退出): ")
-        if command.lower() == 'q':
-            running = False
+# ---------- 用户输入处理 ----------
+def get_user_input(prompt: str) -> int:
+    """循环直到用户输入 0~255 的整数"""
+    while True:
+        raw = input(prompt).strip()
+        if not raw.isdigit():
+            print("❌ 请输入 0~255 的整数")
             continue
-        value = input("输入数据值 (0-255): ")
-    stop_event.set()
-    com.close()
-    sys.exit(0)
+        num = int(raw)
+        if 0 <= num <= 255:
+            return num
+        print("❌ 数值超出范围，请输入 0~255")
+
+# ---------- 主程序 ----------
+if __name__ == "__main__":
+    ser = connect_com()
+    if ser is None:
+        sys.exit(1)
+
+    print("输入命令字和数据值 (0~255)，发送线程会以 5Hz 持续发送最新数据包")
+    print("输入 'q' 退出\n")
+
+    # 启动发送线程
+    t = threading.Thread(target=sender, args=(ser,), daemon=True)
+    t.start()
+
+    try:
+        while True:
+            cmd_input = input("命令字 (0~255，q 退出): ").strip()
+            if cmd_input.lower() == 'q':
+                break
+            if not cmd_input.isdigit():
+                print("❌ 请输入数字或 'q'")
+                continue
+            cmd = int(cmd_input)
+            if not 0 <= cmd <= 255:
+                print("❌ 命令字需在 0~255 之间")
+                continue
+
+            # 输入数据值
+            val = get_user_input("数据值 (0~255): ")
+
+            # 更新共享变量（线程安全）
+            with data_lock:
+                latest_command = cmd
+                latest_value = val
+            print(f"✅ 已更新发送内容: 命令={cmd}, 值={val}\n")
+
+    finally:
+        stop_event.set()        # 通知线程退出
+        t.join(timeout=1)       # 等待线程结束
+        ser.close()
+        print("串口已关闭，程序结束。")
+        sys.exit(0)
