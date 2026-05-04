@@ -7,7 +7,7 @@ import struct
 import Command
 
 # ---------- 配置 ----------
-SERIAL_PORT = 'COM11'
+SERIAL_PORT = '/dev/ttyUSB0'  # 根据实际情况修改
 BAUDRATE = 115200
 SEND_INTERVAL = 0.2  # 5 Hz
 RECV_POLL_INTERVAL = 0.01    # 接收轮询间隔（10ms，避免 CPU 空转）
