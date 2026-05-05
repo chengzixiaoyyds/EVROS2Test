@@ -117,8 +117,6 @@ if __name__ == "__main__":
 
     try:
         while True:
-             # 处理接收到的数据包（非阻塞）
-            
             cmd_input = input("").strip()
             if cmd_input.lower() == 'q':
                 break
