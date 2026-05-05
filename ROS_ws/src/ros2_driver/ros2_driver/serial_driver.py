@@ -148,7 +148,7 @@ class SerialDriver(Node):
             packet = command_buffer.get_command()
             if packet:
                 cmd = packet[2]
-                self.publisher_gpio_state.publish(Bool(cmd))  # 假设 0x10 表示 GPIO 状态为 True
+                self.publisher_gpio_state.publish(Bool(data = bool(cmd)))  # 假设 0x10 表示 GPIO 状态为 True
                 self.get_logger().info(f"接收: {packet.hex()}，发布 GPIO 状态: {cmd}")
 
 def main(args=None):
