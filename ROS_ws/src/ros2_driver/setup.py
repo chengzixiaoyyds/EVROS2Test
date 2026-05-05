@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'serial_driver = ros2_driver.serial_driver:main',
+            'gui_driver = ros2_driver.gui_driver:main',
         ],
     },
 )
