@@ -10,7 +10,7 @@ import Command
 SERIAL_PORT = '/dev/ttyUSB0'  # 根据实际情况修改
 BAUDRATE = 115200
 SEND_INTERVAL = 0.2  # 5 Hz
-RECV_POLL_INTERVAL = 0.01    # 接收轮询间隔（10ms，避免 CPU 空转）
+RECV_POLL_INTERVAL = 0.01    # 接收轮询间隔
 
 # 全局共享变量（线程安全）
 latest_command = 0
@@ -43,10 +43,7 @@ def build_packet(command: int, value: int) -> bytes:
         # 普通命令，value 占 1 字节
         payload = HEADER + bytes([command, value])
     checksum = sum(payload) & 0xFF
-    return payload + bytes([checksum])
-
-#def break_packet(packet: bytes):
-    
+    return payload + bytes([checksum])  
 
 # ---------- 发送线程 ----------
 def sender(ser: serial.Serial):
@@ -59,8 +56,6 @@ def sender(ser: serial.Serial):
         
         packet = build_packet(cmd, val)
         ser.write(packet)
-        # 打印十六进制方便调试
-        hex_str = ' '.join(f'{b:02X}' for b in packet)
         
         # 精准 5Hz 延时（避免累积误差）
         elapsed = time.time() - last_time
