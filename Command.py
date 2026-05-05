@@ -1,14 +1,13 @@
 class CommandBuffer:
     """循环缓冲区，用于解析串口指令"""
     
-    BUFFER_SIZE = 255
+    BUFFER_SIZE = 255 # 缓冲区大小
     
     def __init__(self):
         self.buffer = bytearray(self.BUFFER_SIZE)
         self.read_index = 0
         self.write_index = 0
     
-    # ---------- 内部辅助 ----------
     def _read(self, index: int) -> int:
         """读取缓冲区第 index 位（自动循环）"""
         return self.buffer[index % self.BUFFER_SIZE]
@@ -17,7 +16,6 @@ class CommandBuffer:
         """读指针前进 length 字节"""
         self.read_index = (self.read_index + length) % self.BUFFER_SIZE
     
-    # ---------- 基本操作 ----------
     def get_length(self) -> int:
         """未处理数据长度"""
         return (self.write_index - self.read_index + self.BUFFER_SIZE) % self.BUFFER_SIZE
@@ -45,7 +43,6 @@ class CommandBuffer:
             self.write_index = second_part
         return length
 
-    # ---------- 指令解析 ----------
     def get_command(self):
         """
         尝试提取一条完整指令。
