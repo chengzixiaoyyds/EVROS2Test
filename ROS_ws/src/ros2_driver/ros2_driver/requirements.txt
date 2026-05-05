@@ -1,0 +1,5 @@
+# requirements.txt
+PySide6
+rclpy
+std_msgs
+pyserial

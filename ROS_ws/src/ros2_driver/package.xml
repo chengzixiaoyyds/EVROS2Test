@@ -9,7 +9,7 @@
 
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
-  <depend>serial</depend>
+  <depend>pyserial</depend>
   <depend>CommandBuffer</depend>
   <depend>PySide6</depend>
   <depend>LightControl</depend>
