@@ -48,7 +48,7 @@ class CommandBuffer:
         尝试提取一条完整指令。
         成功时返回 bytes 类型的指令包（包含包头、命令、数据、校验），失败返回 None。
         """
-        COMMAND_MIN_LENGTH = 4  # 包头2 + 命令1 + 校验1
+        COMMAND_MIN_LENGTH = 4
 
         while True:
             cur_len = self.get_length()
@@ -60,7 +60,7 @@ class CommandBuffer:
                 self._add_read_index(1)
                 continue
 
-            packet_len = 6
+            packet_len = 4
 
             if cur_len < packet_len:
                 return None
@@ -68,7 +68,7 @@ class CommandBuffer:
             # 计算校验和（包内除校验字节外的所有字节求和，取低 8 位）
             checksum = sum(self._read(self.read_index + i) for i in range(packet_len - 1)) & 0xFF
             if checksum != self._read(self.read_index + packet_len - 1):
-                self._add_read_index(1)   # 校验错，只移动 1 字节
+                self._add_read_index(1)   # 校验错，移动 1 字节
                 continue
 
             # 提取完整数据包
