@@ -69,6 +69,5 @@ class GuiDriver(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = GuiDriver('gui_driver')
-    rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
